@@ -49,6 +49,7 @@ public class AnnotateTextIT {
             .apply(Create.of(doc))
             .apply(AnnotateText.newBuilder().setFeatures(features).build());
     PAssert.that(responses).satisfies(new VerifyTextAnnotationResult());
+    testPipeline.run();
   }
 
   private static class VerifyTextAnnotationResult
