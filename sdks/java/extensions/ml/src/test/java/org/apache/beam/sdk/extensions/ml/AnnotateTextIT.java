@@ -41,7 +41,8 @@ public class AnnotateTextIT {
 
   @Test
   public void analyzesLanguage() {
-    Document doc = Document.newBuilder().setContent(TEST_STRING).build();
+    Document doc =
+        Document.newBuilder().setContent(TEST_STRING).setType(Document.Type.PLAIN_TEXT).build();
     AnnotateTextRequest.Features features =
         AnnotateTextRequest.Features.newBuilder().setExtractSyntax(true).build();
     PCollection<AnnotateTextResponse> responses =
@@ -49,7 +50,7 @@ public class AnnotateTextIT {
             .apply(Create.of(doc))
             .apply(AnnotateText.newBuilder().setFeatures(features).build());
     PAssert.that(responses).satisfies(new VerifyTextAnnotationResult());
-    testPipeline.run();
+    testPipeline.run().waitUntilFinish();
   }
 
   private static class VerifyTextAnnotationResult

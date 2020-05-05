@@ -82,7 +82,8 @@ public abstract class AnnotateText
         if (languageHint != null) {
           element = element.toBuilder().setLanguage(languageHint).build();
         }
-        context.output(client.annotateText(element, features));
+        AnnotateTextResponse output = client.annotateText(element, features);
+        context.output(output);
       }
     }
   }
