@@ -91,6 +91,7 @@ import org.apache.beam.sdk.state.ValueState;
 import org.apache.beam.sdk.transforms.Count;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.GroupIntoBatches;
 import org.apache.beam.sdk.transforms.Impulse;
 import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.PTransform;
@@ -129,6 +130,7 @@ import org.mockito.ArgumentMatcher;
 /** Tests for DataflowPipelineTranslator. */
 @RunWith(JUnit4.class)
 public class DataflowPipelineTranslatorTest implements Serializable {
+
   @Rule public transient ExpectedException thrown = ExpectedException.none();
 
   private SdkComponents createSdkComponents(PipelineOptions options) {
@@ -146,6 +148,7 @@ public class DataflowPipelineTranslatorTest implements Serializable {
   // A Custom Mockito matcher for an initial Job that checks that all
   // expected fields are set.
   private static class IsValidCreateRequest implements ArgumentMatcher<Job> {
+
     @Override
     public boolean matches(Job o) {
       Job job = (Job) o;
@@ -593,6 +596,7 @@ public class DataflowPipelineTranslatorTest implements Serializable {
   }
 
   private static class TestValueProvider implements ValueProvider<String>, Serializable {
+
     @Override
     public boolean isAccessible() {
       return false;
@@ -1115,6 +1119,32 @@ public class DataflowPipelineTranslatorTest implements Serializable {
   }
 
   @Test
+  public void testGroupIntoBatchesTranslation() throws Exception {
+    DataflowPipelineOptions options = buildPipelineOptions();
+    options.setStreaming(true);
+    DataflowPipelineTranslator translator = DataflowPipelineTranslator.fromOptions(options);
+
+    Pipeline pipeline = Pipeline.create(options);
+    pipeline
+        .apply(Create.of(Arrays.asList(KV.of(1, "1"), KV.of(2, "2"), KV.of(3, "3"))))
+        .apply(GroupIntoBatches.ofSize(2));
+
+    DataflowRunner runner = DataflowRunner.fromOptions(options);
+    runner.replaceTransforms(pipeline);
+    SdkComponents sdkComponents = createSdkComponents(options);
+    RunnerApi.Pipeline pipelineProto = PipelineTranslation.toProto(pipeline, sdkComponents, true);
+    Job job =
+        translator
+            .translate(pipeline, pipelineProto, sdkComponents, runner, Collections.emptyList())
+            .getJob();
+    List<Step> steps = job.getSteps();
+    Step shardedStateStep = steps.get(steps.size() - 1);
+    Map<String, Object> properties = shardedStateStep.getProperties();
+    assertTrue(properties.containsKey(PropertyNames.ALLOWS_SHARDABLE_STATE));
+    assertEquals("true", getString(properties, PropertyNames.ALLOWS_SHARDABLE_STATE));
+  }
+
+  @Test
   public void testStepDisplayData() throws Exception {
     DataflowPipelineOptions options = buildPipelineOptions();
     DataflowPipelineTranslator translator = DataflowPipelineTranslator.fromOptions(options);
@@ -1276,6 +1306,7 @@ public class DataflowPipelineTranslatorTest implements Serializable {
   }
 
   private static class TestSplittableFn extends DoFn<String, Integer> {
+
     @ProcessElement
     public void process(ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       // noop

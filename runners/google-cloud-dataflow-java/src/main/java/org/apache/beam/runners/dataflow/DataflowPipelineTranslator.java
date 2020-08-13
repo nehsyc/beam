@@ -83,6 +83,7 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.DoFnSchemaInformation;
 import org.apache.beam.sdk.transforms.Flatten;
 import org.apache.beam.sdk.transforms.GroupByKey;
+import org.apache.beam.sdk.transforms.GroupIntoBatches;
 import org.apache.beam.sdk.transforms.Materializations;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -123,6 +124,7 @@ import org.slf4j.LoggerFactory;
 @SuppressWarnings({"rawtypes", "unchecked"})
 @VisibleForTesting
 public class DataflowPipelineTranslator {
+
   // Must be kept in sync with their internal counterparts.
   private static final Logger LOG = LoggerFactory.getLogger(DataflowPipelineTranslator.class);
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -191,6 +193,7 @@ public class DataflowPipelineTranslator {
    * may be of use to other classes (eg the {@link PTransform} to StepName mapping).
    */
   public static class JobSpecification {
+
     private final Job job;
     private final Map<AppliedPTransform<?, ?, ?>, String> stepNames;
     private final RunnerApi.Pipeline pipelineProto;
@@ -261,6 +264,7 @@ public class DataflowPipelineTranslator {
    * <p>For internal use only.
    */
   class Translator extends PipelineVisitor.Defaults implements TranslationContext {
+
     /**
      * An id generator to be used when giving unique ids for pipeline level constructs. This is
      * purposely wrapped inside of a {@link Supplier} to prevent the incorrect usage of the {@link
@@ -1237,6 +1241,8 @@ public class DataflowPipelineTranslator {
       DataflowRunner.verifyDoFnSupported(fn, context.getPipelineOptions().isStreaming());
       DataflowRunner.verifyStateSupportForWindowingStrategy(windowingStrategy);
     }
+    boolean isStateShardable =
+        isStateful && fn.getClass().equals(GroupIntoBatches.GroupIntoBatchesDoFn.class);
 
     stepContext.addInput(PropertyNames.USER_FN, fn.getClass().getName());
 
@@ -1264,6 +1270,9 @@ public class DataflowPipelineTranslator {
     // in streaming but does not work in batch
     if (context.getPipelineOptions().isStreaming() && isStateful) {
       stepContext.addInput(PropertyNames.USES_KEYED_STATE, "true");
+      if (isStateShardable) {
+        stepContext.addInput(PropertyNames.ALLOWS_SHARDABLE_STATE, "true");
+      }
     }
   }
 

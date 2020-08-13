@@ -33,7 +33,6 @@ import org.apache.beam.sdk.state.ValueState;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
@@ -100,8 +99,7 @@ public class GroupIntoBatches<K, InputT>
         ParDo.of(new GroupIntoBatchesDoFn<>(batchSize, allowedLateness, keyCoder, valueCoder)));
   }
 
-  @VisibleForTesting
-  static class GroupIntoBatchesDoFn<K, InputT>
+  public static class GroupIntoBatchesDoFn<K, InputT>
       extends DoFn<KV<K, InputT>, KV<K, Iterable<InputT>>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(GroupIntoBatchesDoFn.class);
