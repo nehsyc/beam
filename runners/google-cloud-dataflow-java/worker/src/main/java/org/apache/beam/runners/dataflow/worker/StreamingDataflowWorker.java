@@ -30,6 +30,7 @@ import com.google.api.services.dataflow.model.StreamingComputationConfig;
 import com.google.api.services.dataflow.model.StreamingConfigTask;
 import com.google.api.services.dataflow.model.WorkItem;
 import com.google.api.services.dataflow.model.WorkItemStatus;
+import com.google.auto.value.AutoValue;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.File;
 import java.io.IOException;
@@ -124,6 +125,7 @@ import org.apache.beam.sdk.fn.IdGenerator;
 import org.apache.beam.sdk.fn.IdGenerators;
 import org.apache.beam.sdk.fn.JvmInitializers;
 import org.apache.beam.sdk.io.FileSystems;
+import org.apache.beam.sdk.metrics.MetricName;
 import org.apache.beam.sdk.util.BackOff;
 import org.apache.beam.sdk.util.BackOffUtils;
 import org.apache.beam.sdk.util.FluentBackoff;
@@ -205,6 +207,12 @@ public class StreamingDataflowWorker {
 
   /** Maximum number of failure stacktraces to report in each update sent to backend. */
   private static final int MAX_FAILURES_TO_REPORT_IN_UPDATE = 1000;
+
+  // TODO(BEAM-7863): Update throttling counters to use generic throttling-msecs metric.
+  public static final MetricName BIGQUERY_STREAMING_INSERT_THROTTLE_TIME =
+      MetricName.named(
+          "org.apache.beam.sdk.io.gcp.bigquery.BigQueryServicesImpl$DatasetServiceImpl",
+          "throttling-msecs");
 
   private final AtomicLong counterAggregationErrorCount = new AtomicLong();
 
@@ -525,8 +533,14 @@ public class StreamingDataflowWorker {
     private void translateKnownStepCounters(CounterUpdate stepCounterUpdate) {
       CounterStructuredName structuredName =
           stepCounterUpdate.getStructuredNameAndMetadata().getName();
-      if (THROTTLING_MSECS_METRIC_NAME.getNamespace().equals(structuredName.getOriginNamespace())
-          && THROTTLING_MSECS_METRIC_NAME.getName().equals(structuredName.getName())) {
+      if ((THROTTLING_MSECS_METRIC_NAME.getNamespace().equals(structuredName.getOriginNamespace())
+              && THROTTLING_MSECS_METRIC_NAME.getName().equals(structuredName.getName()))
+          || (BIGQUERY_STREAMING_INSERT_THROTTLE_TIME
+                  .getNamespace()
+                  .equals(structuredName.getOriginNamespace())
+              && BIGQUERY_STREAMING_INSERT_THROTTLE_TIME
+                  .getName()
+                  .equals(structuredName.getName()))) {
         long msecs = DataflowCounterUpdateExtractor.splitIntToLong(stepCounterUpdate.getInteger());
         if (msecs > 0) {
           throttledMsecs.addValue(msecs);
@@ -1099,40 +1113,27 @@ public class StreamingDataflowWorker {
           }
         };
     if (!computationState.activateWork(
-        new ShardedKey(workItem.getKey(), workItem.getShardingKey()), work)) {
+        ShardedKey.create(workItem.getKey(), workItem.getShardingKey()), work)) {
       // Free worker if the work was not activated.
       // This can happen if it's duplicate work or some other reason.
       sdkHarnessRegistry.completeWork(worker);
     }
   }
 
-  static class ShardedKey {
+  @AutoValue
+  abstract static class ShardedKey {
 
-    private final ByteString key;
-    private final long shardingKey;
-
-    ShardedKey(ByteString key, long shardingKey) {
-      this.key = key;
-      this.shardingKey = shardingKey;
+    public static ShardedKey create(ByteString key, long shardingKey) {
+      return new AutoValue_StreamingDataflowWorker_ShardedKey(key, shardingKey);
     }
 
-    @Override
-    public boolean equals(Object that) {
-      if (that instanceof ShardedKey) {
-        ShardedKey other = (ShardedKey) that;
-        return key.equals(other.key) && shardingKey == other.shardingKey;
-      }
-      return false;
-    }
+    public abstract ByteString key();
 
-    @Override
-    public int hashCode() {
-      return Objects.hash(key, shardingKey);
-    }
+    public abstract long shardingKey();
 
     @Override
     public String toString() {
-      return String.format("%s / %d", TextFormat.escapeBytes(key), shardingKey);
+      return String.format("%s-%d", TextFormat.escapeBytes(key()), shardingKey());
     }
   }
 
@@ -1502,7 +1503,7 @@ public class StreamingDataflowWorker {
         // Consider the item invalid. It will eventually be retried by Windmill if it still needs to
         // be processed.
         computationState.completeWork(
-            new ShardedKey(key, workItem.getShardingKey()), workItem.getWorkToken());
+            ShardedKey.create(key, workItem.getShardingKey()), workItem.getWorkToken());
       }
     } finally {
       // Update total processing time counters. Updating in finally clause ensures that
@@ -1578,7 +1579,7 @@ public class StreamingDataflowWorker {
         ComputationState computationState = entry.getKey();
         for (Windmill.WorkItemCommitRequest workRequest : entry.getValue().getRequestsList()) {
           computationState.completeWork(
-              new ShardedKey(workRequest.getKey(), workRequest.getShardingKey()),
+              ShardedKey.create(workRequest.getKey(), workRequest.getShardingKey()),
               workRequest.getWorkToken());
         }
       }
@@ -1606,7 +1607,8 @@ public class StreamingDataflowWorker {
           // This may throw an exception if the commit was not active, which is possible if it
           // was deemed stuck.
           state.completeWork(
-              new ShardedKey(request.getKey(), request.getShardingKey()), request.getWorkToken());
+              ShardedKey.create(request.getKey(), request.getShardingKey()),
+              request.getWorkToken());
         })) {
       return true;
     } else {
@@ -2208,10 +2210,10 @@ public class StreamingDataflowWorker {
           sdkWorkerHarness, key -> new ConcurrentLinkedQueue<>());
     }
 
-    /** Mark the given key and work as active. */
-    public boolean activateWork(ShardedKey key, Work work) {
+    /** Mark the given shardedKey and work as active. */
+    public boolean activateWork(ShardedKey shardedKey, Work work) {
       synchronized (activeWork) {
-        Deque<Work> queue = activeWork.get(key);
+        Deque<Work> queue = activeWork.get(shardedKey);
         if (queue != null) {
           Preconditions.checkState(!queue.isEmpty());
           // Ensure we don't already have this work token queueud.
@@ -2226,7 +2228,7 @@ public class StreamingDataflowWorker {
         } else {
           queue = new ArrayDeque<>();
           queue.addLast(work);
-          activeWork.put(key, queue);
+          activeWork.put(shardedKey, queue);
           // Fall through to execute without the lock held.
         }
       }
@@ -2234,11 +2236,14 @@ public class StreamingDataflowWorker {
       return true;
     }
 
-    /** Marks the work for a the given key as complete. Schedules queued work for the key if any. */
-    public void completeWork(ShardedKey key, long workToken) {
+    /**
+     * Marks the work for a the given shardedKey as complete. Schedules queued work for the key if
+     * any.
+     */
+    public void completeWork(ShardedKey shardedKey, long workToken) {
       Work nextWork;
       synchronized (activeWork) {
-        Queue<Work> queue = activeWork.get(key);
+        Queue<Work> queue = activeWork.get(shardedKey);
         Preconditions.checkNotNull(queue);
         Work completedWork = queue.peek();
         // avoid Preconditions.checkNotNull and checkState here to prevent eagerly evaluating the
@@ -2246,18 +2251,18 @@ public class StreamingDataflowWorker {
         if (completedWork == null) {
           throw new NullPointerException(
               String.format(
-                  "No active state for key %s, expected token %s", key.toString(), workToken));
+                  "No active state for key %s, expected token %s", shardedKey, workToken));
         }
         if (completedWork.getWorkItem().getWorkToken() != workToken) {
           throw new IllegalStateException(
               String.format(
                   "Token mismatch for key %s: %s and %s",
-                  key.toString(), completedWork.getWorkItem().getWorkToken(), workToken));
+                  shardedKey, completedWork.getWorkItem().getWorkToken(), workToken));
         }
         queue.remove(); // We consumed the matching work item.
         nextWork = queue.peek();
         if (nextWork == null) {
-          Preconditions.checkState(queue == activeWork.remove(key));
+          Preconditions.checkState(queue == activeWork.remove(shardedKey));
         }
       }
       if (nextWork != null) {
@@ -2271,19 +2276,19 @@ public class StreamingDataflowWorker {
         // activeWork as completeWork may delete the entry from activeWork.
         Map<ShardedKey, Long> stuckCommits = new HashMap<>();
         for (Map.Entry<ShardedKey, Deque<Work>> entry : activeWork.entrySet()) {
-          ShardedKey key = entry.getKey();
+          ShardedKey shardedKey = entry.getKey();
           Work work = entry.getValue().peek();
           if (work.getState() == State.COMMITTING
               && work.getStateStartTime().isBefore(stuckCommitDeadline)) {
             LOG.error(
                 "Detected key with sharding key {} stuck in COMMITTING state, completing it with error.",
                 work.workItem.getShardingKey());
-            stuckCommits.put(key, work.getWorkItem().getWorkToken());
+            stuckCommits.put(shardedKey, work.getWorkItem().getWorkToken());
           }
         }
         for (Map.Entry<ShardedKey, Long> stuckCommit : stuckCommits.entrySet()) {
           computationStateCache.invalidate(
-              stuckCommit.getKey().key, stuckCommit.getKey().shardingKey);
+              stuckCommit.getKey().key(), stuckCommit.getKey().shardingKey());
           completeWork(stuckCommit.getKey(), stuckCommit.getValue());
         }
       }
@@ -2294,13 +2299,13 @@ public class StreamingDataflowWorker {
       List<Windmill.KeyedGetDataRequest> result = new ArrayList<>();
       synchronized (activeWork) {
         for (Map.Entry<ShardedKey, Deque<Work>> entry : activeWork.entrySet()) {
-          ShardedKey key = entry.getKey();
+          ShardedKey shardedKey = entry.getKey();
           for (Work work : entry.getValue()) {
             if (work.getStartTime().isBefore(refreshDeadline)) {
               result.add(
                   Windmill.KeyedGetDataRequest.newBuilder()
-                      .setKey(key.key)
-                      .setShardingKey(key.shardingKey)
+                      .setKey(shardedKey.key())
+                      .setShardingKey(shardedKey.shardingKey())
                       .setWorkToken(work.getWorkItem().getWorkToken())
                       .build());
             }
