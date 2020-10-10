@@ -37,6 +37,7 @@ from apache_beam.transforms import window
 from apache_beam.transforms.window import GlobalWindow
 from apache_beam.utils import timestamp
 from apache_beam.utils import windowed_value
+from apache_beam.utils.sharded_key import ShardedKey
 from apache_beam.utils.timestamp import MIN_TIMESTAMP
 
 from . import observable
@@ -569,6 +570,37 @@ class CodersTest(unittest.TestCase):
             1: "one", 300: "three hundred"
         }, {}, {i: str(i)
                 for i in range(5000)})
+
+  def test_sharded_key_coder(self):
+    coder = coders.ShardedKeyCoder(coders.BytesCoder())
+    # Verify cloud object representation
+    self.assertEqual({
+        '@type': 'kind:sharded_key',
+        'component_encodings': [coders.BytesCoder().as_cloud_object()]
+    },
+                     coder.as_cloud_object())
+
+    # Test binary representation
+    self.assertEqual(b'\x00\x00', coder.encode(ShardedKey(b'')))
+    self.assertEqual(b'\x00\x03key', coder.encode(ShardedKey(b'key')))
+    self.assertEqual(b'\x00\x00', coder.encode(ShardedKey(b'', b'')))
+    self.assertEqual(b'\x03123\00', coder.encode(ShardedKey(b'', b'123')))
+    self.assertEqual(b'\x03123\03key', coder.encode(ShardedKey(b'key', b'123')))
+
+    test_values = [
+        ShardedKey(b''),
+        ShardedKey(b'key'),
+        ShardedKey(b'', b''),
+        ShardedKey(b'', b'123'),
+        ShardedKey(b'key', b'123')
+    ]
+    for value in test_values:
+      # Test unnested
+      self.check_coder(coder, value)
+      for other_value in test_values:
+        # Test nested
+        self.check_coder(
+            coders.TupleCoder((coder, coder)), (value, other_value))
 
 
 if __name__ == '__main__':

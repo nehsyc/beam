@@ -90,7 +90,6 @@ import org.junit.runners.Parameterized.Parameters;
 /** Tests that Java SDK coders standardized by the Fn API meet the common spec. */
 @RunWith(Parameterized.class)
 public class CommonCoderTest {
-
   private static final String STANDARD_CODERS_YAML_PATH =
       "/org/apache/beam/model/fnexecution/v1/standard_coders.yaml";
 
@@ -118,7 +117,6 @@ public class CommonCoderTest {
 
   @AutoValue
   abstract static class CommonCoder {
-
     abstract String getUrn();
 
     abstract List<CommonCoder> getComponents();
@@ -144,7 +142,6 @@ public class CommonCoderTest {
 
   @AutoValue
   abstract static class CommonCoderTestSpec {
-
     abstract CommonCoder getCoder();
 
     abstract @Nullable Boolean getNested();
@@ -162,7 +159,6 @@ public class CommonCoderTest {
 
   @AutoValue
   abstract static class OneCoderTestSpec {
-
     abstract CommonCoder getCoder();
 
     abstract boolean getNested();
@@ -343,10 +339,7 @@ public class CommonCoderTest {
     } else if (s.equals(getUrn(StandardCoders.Enum.SHARDED_KEY))) {
       Map<String, Object> kvMap = (Map<String, Object>) value;
       Coder<?> keyCoder = ((ShardedKey.Coder) coder).getKeyCoder();
-      byte[] shardId =
-          kvMap.get("shardId") == null
-              ? null
-              : ((String) kvMap.get("shardId")).getBytes(StandardCharsets.ISO_8859_1);
+      byte[] shardId = ((String) kvMap.get("shardId")).getBytes(StandardCharsets.ISO_8859_1);
       return ShardedKey.of(
           convertValue(kvMap.get("key"), coderSpec.getComponents().get(0), keyCoder), shardId);
     } else {
