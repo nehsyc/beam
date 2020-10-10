@@ -43,7 +43,7 @@ message BeamConstants {
     // The smallest representable timestamp of an element or a window boundary.
     MIN_TIMESTAMP_MILLIS = 0 [(beam_constant) = "-9223372036854775"];
     // The largest representable timestamp of an element or a window boundary.
-    MAX_TIMESTAMP_MILLIS = 1 [(beam_constant) =  "9223372036854775"];
+    MAX_TIMESTAMP_MILLIS = 1 [(beam_constant) = "9223372036854775"];
 
     // The maximum timestamp for the global window.
     // Triggers use max timestamp to set timers' timestamp. Timers fire when
@@ -356,8 +356,8 @@ message StandardPTransforms {
     // https://s.apache.org/beam-runner-api-combine-model#heading=h.h5697l1scd9x
     // Payload: CombinePayload
     COMBINE_PER_KEY_CONVERT_TO_ACCUMULATORS = 4
-        [(beam_urn) =
-             "beam:transform:combine_per_key_convert_to_accumulators:v1"];
+    [(beam_urn) =
+      "beam:transform:combine_per_key_convert_to_accumulators:v1"];
   }
   // Payload for all of these: ParDoPayload containing the user's SDF
   enum SplittableParDoComponents {
@@ -879,6 +879,34 @@ message StandardCoders {
     // Components: None
     // Experimental.
     ROW = 13 [(beam_urn) = "beam:coder:row:v1"];
+
+    // Encodes a use key and a shard id which is an opaque byte string.
+    //
+    // The encoding for a sharded key consists of the length prefixed shard id
+    // and the encoded user key in the following order:
+    //
+    //     null indicator
+    //     varInt(len(shard id))
+    //     shard id
+    //     encode(user key)
+    //
+    // where null indicator is one byte, 0x00 for null shard id, or 0x01 for
+    // present shard id.
+    //
+    // Examples:
+    // user_key with null shard id
+    //     0x00
+    //     encode(user_key)
+    //
+    // user_key with shard id taking up two bytes.
+    //     0x01
+    //     0x02
+    //     0x11 0x22
+    //     encode(user_key)
+    //
+    // Components: the user key coder.
+    // Experimental.
+    SHARDED_KEY = 15 [(beam_urn) = "beam:coder:sharded_key:v1"];
   }
 }
 
@@ -1215,23 +1243,23 @@ message StandardArtifacts {
   enum Types {
     // A URN for locally-accessible artifact files.
     // payload: ArtifactFilePayload
-    FILE      = 0 [(beam_urn) = "beam:artifact:type:file:v1"];
+    FILE = 0 [(beam_urn) = "beam:artifact:type:file:v1"];
 
     // A URN for artifacts described by URLs.
     // payload: ArtifactUrlPayload
-    URL       = 1 [(beam_urn) = "beam:artifact:type:url:v1"];
+    URL = 1 [(beam_urn) = "beam:artifact:type:url:v1"];
 
     // A URN for artifacts embedded in ArtifactInformation proto.
     // payload: EmbeddedFilePayload.
-    EMBEDDED  = 2 [(beam_urn) = "beam:artifact:type:embedded:v1"];
+    EMBEDDED = 2 [(beam_urn) = "beam:artifact:type:embedded:v1"];
 
     // A URN for Python artifacts hosted on PYPI.
     // payload: PypiPayload
-    PYPI      = 3 [(beam_urn) = "beam:artifact:type:pypi:v1"];
+    PYPI = 3 [(beam_urn) = "beam:artifact:type:pypi:v1"];
 
     // A URN for Java artifacts hosted on a Maven repository.
     // payload: MavenPayload
-    MAVEN     = 4 [(beam_urn) = "beam:artifact:type:maven:v1"];
+    MAVEN = 4 [(beam_urn) = "beam:artifact:type:maven:v1"];
 
     // A URN for deferred artifacts.
     // payload: DeferredArtifactPayload
@@ -1240,7 +1268,7 @@ message StandardArtifacts {
   enum Roles {
     // A URN for staging-to role.
     // payload: ArtifactStagingToRolePayload
-    STAGING_TO  = 0 [(beam_urn) = "beam:artifact:role:staging_to:v1"];
+    STAGING_TO = 0 [(beam_urn) = "beam:artifact:role:staging_to:v1"];
   }
 }
 
