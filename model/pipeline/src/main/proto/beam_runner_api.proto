@@ -882,19 +882,18 @@ message StandardCoders {
 
     // Encodes a use key and a shard id which is an opaque byte string.
     //
-    // The encoding for a sharded key consists of the length prefixed shard id
-    // and the encoded user key in the following order:
+    // The encoding for a sharded key consists of a shard id byte string and the
+    // encoded user key in the following order:
     //
-    //     varInt(len(shard id))
-    //     shard id
-    //     encode(user key)
+    //     - length prefixed shard id using beam:coder:bytes:v1
+    //     - encoded user key
     //
     // Examples:
-    // user_key with empty shard id
+    // user key with an empty shard id
     //     0x00
     //     encode(user_key)
     //
-    // user_key with shard id taking up two bytes.
+    // user key with a shard id taking up two bytes.
     //     0x02
     //     0x11 0x22
     //     encode(user_key)

@@ -1374,17 +1374,16 @@ class ShardedKeyCoderImpl(StreamCoderImpl):
   A coder for sharded user keys.
 
   The encoding and decoding should follow the order:
-      length of shard id byte string
-      shard id byte string
+      length prefixed shard id byte string
       encoded user key
   """
   def __init__(self, key_coder_impl):
-    self._shard_id_coder_impl = LengthPrefixCoderImpl(BytesCoderImpl())
+    self._shard_id_coder_impl = BytesCoderImpl()
     self._key_coder_impl = key_coder_impl
 
   def encode_to_stream(self, value, out, nested):
     # type: (ShardedKey, create_OutputStream, bool) -> None
-    self._shard_id_coder_impl.encode_to_stream(value.shard_id, out, True)
+    self._shard_id_coder_impl.encode_to_stream(value._shard_id, out, True)
     self._key_coder_impl.encode_to_stream(value.key, out, True)
 
   def decode_from_stream(self, in_stream, nested):
@@ -1397,7 +1396,7 @@ class ShardedKeyCoderImpl(StreamCoderImpl):
     # type: (Any, bool) -> int
     estimated_size = 0
     estimated_size += (
-        self._shard_id_coder_impl.estimate_size(value.shard_id, nested=True))
+        self._shard_id_coder_impl.estimate_size(value._shard_id, nested=True))
     estimated_size += (
         self._key_coder_impl.estimate_size(value.key, nested=True))
     return estimated_size

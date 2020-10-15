@@ -572,35 +572,39 @@ class CodersTest(unittest.TestCase):
                 for i in range(5000)})
 
   def test_sharded_key_coder(self):
-    coder = coders.ShardedKeyCoder(coders.BytesCoder())
-    # Verify cloud object representation
-    self.assertEqual({
-        '@type': 'kind:sharded_key',
-        'component_encodings': [coders.BytesCoder().as_cloud_object()]
-    },
-                     coder.as_cloud_object())
+    key_and_coders = [(b'', b'\x00', coders.BytesCoder()),
+                      (b'key', b'\x03key', coders.BytesCoder()),
+                      ('key', b'\03\x6b\x65\x79', coders.StrUtf8Coder()),
+                      (('k', 1),
+                       b'\x01\x6b\x01',
+                       coders.TupleCoder(
+                           (coders.StrUtf8Coder(), coders.VarIntCoder())))]
 
-    # Test binary representation
-    self.assertEqual(b'\x00\x00', coder.encode(ShardedKey(b'')))
-    self.assertEqual(b'\x00\x03key', coder.encode(ShardedKey(b'key')))
-    self.assertEqual(b'\x00\x00', coder.encode(ShardedKey(b'', b'')))
-    self.assertEqual(b'\x03123\00', coder.encode(ShardedKey(b'', b'123')))
-    self.assertEqual(b'\x03123\03key', coder.encode(ShardedKey(b'key', b'123')))
+    for key, bytes_repr, key_coder in key_and_coders:
+      coder = coders.ShardedKeyCoder(key_coder)
+      # Verify cloud object representation
+      self.assertEqual({
+          '@type': 'kind:sharded_key',
+          'component_encodings': [key_coder.as_cloud_object()]
+      },
+                       coder.as_cloud_object())
+      self.assertEqual(b'\x00' + bytes_repr, coder.encode(ShardedKey(key)))
+      self.assertEqual(
+          b'\x03123' + bytes_repr, coder.encode(ShardedKey(key, b'123')))
 
-    test_values = [
-        ShardedKey(b''),
-        ShardedKey(b'key'),
-        ShardedKey(b'', b''),
-        ShardedKey(b'', b'123'),
-        ShardedKey(b'key', b'123')
-    ]
-    for value in test_values:
       # Test unnested
-      self.check_coder(coder, value)
-      for other_value in test_values:
+      self.check_coder(coder, ShardedKey(key))
+      self.check_coder(coder, ShardedKey(key, b'123'))
+
+      for other_key, _, other_key_coder in key_and_coders:
+        other_coder = coders.ShardedKeyCoder(other_key_coder)
         # Test nested
         self.check_coder(
-            coders.TupleCoder((coder, coder)), (value, other_value))
+            coders.TupleCoder((coder, other_coder)),
+            (ShardedKey(key), ShardedKey(other_key)))
+        self.check_coder(
+            coders.TupleCoder((coder, other_coder)),
+            (ShardedKey(key, b'123'), ShardedKey(other_key)))
 
 
 if __name__ == '__main__':
