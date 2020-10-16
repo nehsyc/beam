@@ -28,42 +28,45 @@ import org.junit.Test;
 public class ShardedKeyTest {
 
   private static final String KEY = "key";
+  private static final byte[] EMPTY_SHARD = new byte[0];
+  private static final byte[] SHARD = "shard_id".getBytes(UTF_8);
 
   @Test
   public void testStructuralValueEqual() throws Exception {
     Coder<ShardedKey<String>> coder = ShardedKey.Coder.of(StringUtf8Coder.of());
     CoderProperties.coderSerializable(coder);
-    CoderProperties.structuralValueDecodeEncodeEqual(
-        coder, ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)));
-    CoderProperties.structuralValueDecodeEncodeEqual(coder, ShardedKey.of(KEY));
+    CoderProperties.structuralValueDecodeEncodeEqual(coder, ShardedKey.of(KEY, SHARD));
+    CoderProperties.structuralValueDecodeEncodeEqual(coder, ShardedKey.of(KEY, EMPTY_SHARD));
     CoderProperties.structuralValueConsistentWithEquals(
         coder,
         ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)),
         ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)));
     CoderProperties.structuralValueConsistentWithEquals(
-        coder, ShardedKey.of(KEY), ShardedKey.of(KEY));
+        coder, ShardedKey.of(KEY, new byte[0]), ShardedKey.of(KEY, new byte[0]));
   }
 
   @Test
   public void testDecodeEncodeEqual() throws Exception {
     Coder<ShardedKey<String>> coder = ShardedKey.Coder.of(StringUtf8Coder.of());
-    CoderProperties.coderDecodeEncodeEqual(coder, ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)));
-    CoderProperties.coderDecodeEncodeEqual(coder, ShardedKey.of(KEY));
+    CoderProperties.coderDecodeEncodeEqual(coder, ShardedKey.of(KEY, SHARD));
+    CoderProperties.coderDecodeEncodeEqual(coder, ShardedKey.of(KEY, EMPTY_SHARD));
     CoderProperties.coderConsistentWithEquals(
         coder,
         ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)),
         ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)));
-    CoderProperties.coderConsistentWithEquals(coder, ShardedKey.of(KEY), ShardedKey.of(KEY));
+    CoderProperties.coderConsistentWithEquals(
+        coder, ShardedKey.of(KEY, new byte[0]), ShardedKey.of(KEY, new byte[0]));
     CoderProperties.coderDeterministic(
         coder,
         ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)),
         ShardedKey.of(KEY, "shard_id".getBytes(UTF_8)));
-    CoderProperties.coderDeterministic(coder, ShardedKey.of(KEY), ShardedKey.of(KEY));
+    CoderProperties.coderDeterministic(
+        coder, ShardedKey.of(KEY, new byte[0]), ShardedKey.of(KEY, new byte[0]));
   }
 
   @Test
   public void testEquality() {
-    assertEquals(ShardedKey.of("key"), ShardedKey.of("key"));
+    assertEquals(ShardedKey.of("key", new byte[0]), ShardedKey.of("key", new byte[0]));
     assertEquals(
         ShardedKey.of("key", "shard_id".getBytes(UTF_8)),
         ShardedKey.of("key", "shard_id".getBytes(UTF_8)));

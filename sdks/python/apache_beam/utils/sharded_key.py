@@ -32,7 +32,7 @@ class ShardedKey(object):
   def __init__(
       self,
       key,
-      shard_id=b'',  # type: bytes
+      shard_id,  # type: bytes
   ):
     # type: (...) -> None
     assert shard_id is not None
@@ -50,10 +50,6 @@ class ShardedKey(object):
     return (
         type(self) == type(other) and self.key == other.key and
         self._shard_id == other._shard_id)
-
-  def __ne__(self, other):
-    # TODO(BEAM-5949): Needed for Python 2 compatibility.
-    return not self == other
 
   def __hash__(self):
     return hash((self.key, self._shard_key))

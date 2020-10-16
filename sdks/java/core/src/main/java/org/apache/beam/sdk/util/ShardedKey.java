@@ -41,12 +41,6 @@ public class ShardedKey<K> {
     this.shardId = shardId;
   }
 
-  /** Creates a ShardedKey with given key and a default shard id which is an empty byte array. */
-  public static <K> ShardedKey<K> of(K key) {
-    checkArgument(key != null, "Key should not be null!");
-    return new ShardedKey<K>(key, EMPTY_SHARD_ID);
-  }
-
   /** Creates a ShardedKey with given key and shard id. Shard id must not be null. */
   public static <K> ShardedKey<K> of(K key, byte[] shardId) {
     checkArgument(key != null, "Key should not be null!");

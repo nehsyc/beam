@@ -588,12 +588,12 @@ class CodersTest(unittest.TestCase):
           'component_encodings': [key_coder.as_cloud_object()]
       },
                        coder.as_cloud_object())
-      self.assertEqual(b'\x00' + bytes_repr, coder.encode(ShardedKey(key)))
+      self.assertEqual(b'\x00' + bytes_repr, coder.encode(ShardedKey(key, b'')))
       self.assertEqual(
           b'\x03123' + bytes_repr, coder.encode(ShardedKey(key, b'123')))
 
       # Test unnested
-      self.check_coder(coder, ShardedKey(key))
+      self.check_coder(coder, ShardedKey(key, b''))
       self.check_coder(coder, ShardedKey(key, b'123'))
 
       for other_key, _, other_key_coder in key_and_coders:
@@ -601,10 +601,10 @@ class CodersTest(unittest.TestCase):
         # Test nested
         self.check_coder(
             coders.TupleCoder((coder, other_coder)),
-            (ShardedKey(key), ShardedKey(other_key)))
+            (ShardedKey(key, b''), ShardedKey(other_key, b'')))
         self.check_coder(
             coders.TupleCoder((coder, other_coder)),
-            (ShardedKey(key, b'123'), ShardedKey(other_key)))
+            (ShardedKey(key, b'123'), ShardedKey(other_key, b'')))
 
 
 if __name__ == '__main__':
