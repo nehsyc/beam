@@ -30,6 +30,8 @@ import logging
 import time
 import typing
 
+from apache_beam.portability.api import beam_runner_api_pb2
+from apache_beam.transforms import userstate
 from google.protobuf import wrappers_pb2
 
 import apache_beam as beam
@@ -107,6 +109,11 @@ class SwitchingDirectRunner(PipelineRunner):
             if any(isinstance(arg, ArgumentPlaceholder)
                    for arg in args_to_check):
               self.supported_by_fnapi_runner = False
+          if userstate.is_stateful_dofn(dofn):
+            _, timer_specs = userstate.get_dofn_specs(dofn)
+            for timer in timer_specs:
+              if timer.time_domain != beam_runner_api_pb2.TimeDomain.EVENT_TIME:
+                self.supported_by_fnapi_runner = False
 
     # Check whether all transforms used in the pipeline are supported by the
     # FnApiRunner, and the pipeline was not meant to be run as streaming.
